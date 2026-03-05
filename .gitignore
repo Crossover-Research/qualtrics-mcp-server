@@ -21,3 +21,6 @@ qualtrics_*_data.*
 
 # MCP config (contains API tokens)
 .mcp.json
+
+# Claude Code local settings
+.claude/
