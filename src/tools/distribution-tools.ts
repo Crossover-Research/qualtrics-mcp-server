@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { QualtricsClient } from "../services/qualtrics-client.js";
 import { DistributionApi } from "../services/distribution-api.js";
 import { QualtricsConfig } from "../config/settings.js";
-import { toolSuccess, withErrorHandling } from "./_helpers.js";
+import { toolSuccess, withErrorHandling, requireDeleteConfirmation } from "./_helpers.js";
 
 export function registerDistributionTools(
   server: McpServer,
@@ -13,11 +13,14 @@ export function registerDistributionTools(
   const distributionApi = new DistributionApi(client);
 
   // List distributions
-  server.tool(
+  server.registerTool(
     "list_distributions",
-    "List all distributions for a survey (email sends, anonymous links, etc.)",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      description: "List all distributions for a survey (email sends, anonymous links, etc.)",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      },
     },
     withErrorHandling("list_distributions", async (args) => {
       const result = await distributionApi.listDistributions(args.surveyId);
@@ -39,12 +42,15 @@ export function registerDistributionTools(
   );
 
   // Get distribution
-  server.tool(
+  server.registerTool(
     "get_distribution",
-    "Get detailed information about a specific distribution including delivery stats",
     {
-      distributionId: z.string().min(1).describe("The distribution ID"),
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      description: "Get detailed information about a specific distribution including delivery stats",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        distributionId: z.string().min(1).describe("The distribution ID"),
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      },
     },
     withErrorHandling("get_distribution", async (args) => {
       const result = await distributionApi.getDistribution(args.distributionId, args.surveyId);
@@ -55,13 +61,16 @@ export function registerDistributionTools(
   );
 
   // Create anonymous link
-  server.tool(
+  server.registerTool(
     "create_anonymous_link",
-    "Generate an anonymous survey link for distribution",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      description: z.string().min(1).describe("Description for this distribution link"),
-      expirationDate: z.string().optional().describe("Link expiration date (ISO format: YYYY-MM-DDTHH:MM:SSZ)"),
+      description: "Generate an anonymous survey link for distribution",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        description: z.string().min(1).describe("Description for this distribution link"),
+        expirationDate: z.string().optional().describe("Link expiration date (ISO format: YYYY-MM-DDTHH:MM:SSZ)"),
+      },
     },
     withErrorHandling("create_anonymous_link", async (args) => {
       const data: Record<string, any> = {
@@ -87,18 +96,21 @@ export function registerDistributionTools(
   );
 
   // Create email distribution
-  server.tool(
+  server.registerTool(
     "create_email_distribution",
-    "Send a survey via email to a mailing list",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      mailingListId: z.string().min(1).describe("The mailing list ID to send to"),
-      fromName: z.string().min(1).describe("From name displayed in the email"),
-      replyToEmail: z.string().min(1).describe("Reply-to email address"),
-      subject: z.string().min(1).describe("Email subject line"),
-      messageId: z.string().min(1).describe("ID of the message template from the library"),
-      libraryId: z.string().min(1).describe("ID of the library containing the message template"),
-      sendDate: z.string().optional().describe("Scheduled send date (ISO format). If omitted, sends immediately."),
+      description: "Send a survey via email to a mailing list",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        mailingListId: z.string().min(1).describe("The mailing list ID to send to"),
+        fromName: z.string().min(1).describe("From name displayed in the email"),
+        replyToEmail: z.string().min(1).describe("Reply-to email address"),
+        subject: z.string().min(1).describe("Email subject line"),
+        messageId: z.string().min(1).describe("ID of the message template from the library"),
+        libraryId: z.string().min(1).describe("ID of the library containing the message template"),
+        sendDate: z.string().optional().describe("Scheduled send date (ISO format). If omitted, sends immediately."),
+      },
     },
     withErrorHandling("create_email_distribution", async (args) => {
       const data: Record<string, any> = {
@@ -137,13 +149,19 @@ export function registerDistributionTools(
   );
 
   // Delete distribution
-  server.tool(
+  server.registerTool(
     "delete_distribution",
-    "Delete a distribution",
     {
-      distributionId: z.string().min(1).describe("The distribution ID to delete"),
+      description: "Delete a distribution",
+      annotations: { destructiveHint: true },
+      inputSchema: {
+        distributionId: z.string().min(1).describe("The distribution ID to delete"),
+        confirmDelete: z.boolean().describe("Must be true to confirm deletion"),
+      },
     },
     withErrorHandling("delete_distribution", async (args) => {
+      const guard = requireDeleteConfirmation(args);
+      if (guard) return guard;
       const result = await distributionApi.deleteDistribution(args.distributionId);
       return toolSuccess({
         success: true,
@@ -155,17 +173,20 @@ export function registerDistributionTools(
   );
 
   // Create reminder
-  server.tool(
+  server.registerTool(
     "create_reminder",
-    "Send a reminder for an existing email distribution",
     {
-      distributionId: z.string().min(1).describe("The parent distribution ID to send a reminder for"),
-      fromName: z.string().min(1).describe("From name displayed in the reminder email"),
-      replyToEmail: z.string().min(1).describe("Reply-to email address"),
-      subject: z.string().min(1).describe("Reminder email subject line"),
-      messageId: z.string().min(1).describe("ID of the reminder message template"),
-      libraryId: z.string().min(1).describe("ID of the library containing the message template"),
-      sendDate: z.string().optional().describe("Scheduled send date (ISO format). If omitted, sends immediately."),
+      description: "Send a reminder for an existing email distribution",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        distributionId: z.string().min(1).describe("The parent distribution ID to send a reminder for"),
+        fromName: z.string().min(1).describe("From name displayed in the reminder email"),
+        replyToEmail: z.string().min(1).describe("Reply-to email address"),
+        subject: z.string().min(1).describe("Reminder email subject line"),
+        messageId: z.string().min(1).describe("ID of the reminder message template"),
+        libraryId: z.string().min(1).describe("ID of the library containing the message template"),
+        sendDate: z.string().optional().describe("Scheduled send date (ISO format). If omitted, sends immediately."),
+      },
     },
     withErrorHandling("create_reminder", async (args) => {
       const data: Record<string, any> = {

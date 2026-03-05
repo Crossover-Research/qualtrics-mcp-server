@@ -13,11 +13,14 @@ export function registerFlowTools(
   const flowApi = new FlowApi(client);
 
   // Get survey flow
-  server.tool(
+  server.registerTool(
     "get_survey_flow",
-    "Get the full survey flow tree showing the order of blocks, embedded data, web services, branching, and randomization",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      description: "Get the full survey flow tree showing the order of blocks, embedded data, web services, branching, and randomization",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      },
     },
     withErrorHandling("get_survey_flow", async (args) => {
       const result = await flowApi.getFlow(args.surveyId);
@@ -29,12 +32,15 @@ export function registerFlowTools(
   );
 
   // Update survey flow (full replacement)
-  server.tool(
+  server.registerTool(
     "update_survey_flow",
-    "Replace the entire survey flow tree. Use get_survey_flow first to get the current flow, modify it, then pass the full tree back.",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      flow: z.any().describe("The complete flow tree object (same structure returned by get_survey_flow)"),
+      description: "Replace the entire survey flow tree. Use get_survey_flow first to get the current flow, modify it, then pass the full tree back.",
+      annotations: { destructiveHint: true, idempotentHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        flow: z.any().describe("The complete flow tree object (same structure returned by get_survey_flow)"),
+      },
     },
     withErrorHandling("update_survey_flow", async (args) => {
       const result = await flowApi.updateFlow(args.surveyId, args.flow);
@@ -48,16 +54,19 @@ export function registerFlowTools(
   );
 
   // Add embedded data fields
-  server.tool(
+  server.registerTool(
     "add_embedded_data",
-    "Add embedded data fields to the survey flow. These fields can be set via URL parameters, contact lists, or web services, and referenced in questions with piped text ${e://Field/FieldName}. The embedded data element is inserted at the beginning of the flow (before all blocks) so fields are available throughout.",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      fields: z.array(z.object({
-        name: z.string().describe("Field name (used in piped text as ${e://Field/name})"),
-        value: z.string().optional().describe("Default value (can include piped text). Leave empty to set via URL param or contact list."),
-        type: z.enum(["Custom", "Recipient"]).optional().describe("'Custom' for flow-set fields, 'Recipient' for contact list fields (default: Custom)"),
-      })).min(1).describe("Array of embedded data fields to add"),
+      description: "Add embedded data fields to the survey flow. These fields can be set via URL parameters, contact lists, or web services, and referenced in questions with piped text ${e://Field/FieldName}. The embedded data element is inserted at the beginning of the flow (before all blocks) so fields are available throughout.",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        fields: z.array(z.object({
+          name: z.string().describe("Field name (used in piped text as ${e://Field/name})"),
+          value: z.string().optional().describe("Default value (can include piped text). Leave empty to set via URL param or contact list."),
+          type: z.enum(["Custom", "Recipient"]).optional().describe("'Custom' for flow-set fields, 'Recipient' for contact list fields (default: Custom)"),
+        })).min(1).describe("Array of embedded data fields to add"),
+      },
     },
     withErrorHandling("add_embedded_data", async (args) => {
       // GET current flow
@@ -105,22 +114,25 @@ export function registerFlowTools(
   );
 
   // Add web service element
-  server.tool(
+  server.registerTool(
     "add_web_service",
-    "Add a Web Service element to the survey flow that makes an HTTP call to an external API during survey execution. Response values can be mapped to embedded data fields for use in subsequent questions via piped text. The web service is inserted at the position you specify (default: before the first block).",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      url: z.string().min(1).describe("Target URL for the HTTP call (can include piped text like ${e://Field/ResponseID})"),
-      method: z.enum(["GET", "POST", "PUT", "DELETE"]).optional().describe("HTTP method (default: GET)"),
-      requestParams: z.array(z.object({
-        key: z.string().describe("Parameter name"),
-        value: z.string().describe("Parameter value (can use piped text)"),
-      })).optional().describe("Request parameters sent as the body (for POST/PUT) or query string (for GET)"),
-      responseMapping: z.array(z.object({
-        jsonPath: z.string().describe("Dot-notation path in the JSON response (e.g., 'data.score', 'result.name')"),
-        fieldName: z.string().describe("Embedded data field name to store the value in"),
-      })).min(1).describe("Map response JSON paths to embedded data fields"),
-      position: z.enum(["beginning", "end"]).optional().describe("Where to insert in the flow (default: beginning)"),
+      description: "Add a Web Service element to the survey flow that makes an HTTP call to an external API during survey execution. Response values can be mapped to embedded data fields for use in subsequent questions via piped text. The web service is inserted at the position you specify (default: before the first block).",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        url: z.string().min(1).describe("Target URL for the HTTP call (can include piped text like ${e://Field/ResponseID})"),
+        method: z.enum(["GET", "POST", "PUT", "DELETE"]).optional().describe("HTTP method (default: GET)"),
+        requestParams: z.array(z.object({
+          key: z.string().describe("Parameter name"),
+          value: z.string().describe("Parameter value (can use piped text)"),
+        })).optional().describe("Request parameters sent as the body (for POST/PUT) or query string (for GET)"),
+        responseMapping: z.array(z.object({
+          jsonPath: z.string().describe("Dot-notation path in the JSON response (e.g., 'data.score', 'result.name')"),
+          fieldName: z.string().describe("Embedded data field name to store the value in"),
+        })).min(1).describe("Map response JSON paths to embedded data fields"),
+        position: z.enum(["beginning", "end"]).optional().describe("Where to insert in the flow (default: beginning)"),
+      },
     },
     withErrorHandling("add_web_service", async (args) => {
       // GET current flow
@@ -193,21 +205,24 @@ export function registerFlowTools(
   );
 
   // Piped text reference
-  server.tool(
+  server.registerTool(
     "piped_text_reference",
-    "Look up Qualtrics piped text syntax. Returns the correct syntax for referencing question responses, embedded data, contact fields, and more in question text, default values, or web service configurations. Use this when you need to dynamically insert values into survey questions.",
     {
-      category: z.enum([
-        "question_response",
-        "embedded_data",
-        "contact_fields",
-        "date_time",
-        "random",
-        "loop_merge",
-        "scoring",
-        "all",
-      ]).optional().describe("Category of piped text to look up (default: all)"),
-      surveyId: z.string().optional().describe("If provided, also lists available question IDs and embedded data fields from this survey"),
+      description: "Look up Qualtrics piped text syntax. Returns the correct syntax for referencing question responses, embedded data, contact fields, and more in question text, default values, or web service configurations. Use this when you need to dynamically insert values into survey questions.",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        category: z.enum([
+          "question_response",
+          "embedded_data",
+          "contact_fields",
+          "date_time",
+          "random",
+          "loop_merge",
+          "scoring",
+          "all",
+        ]).optional().describe("Category of piped text to look up (default: all)"),
+        surveyId: z.string().optional().describe("If provided, also lists available question IDs and embedded data fields from this survey"),
+      },
     },
     async (args) => {
       const reference: Record<string, any> = {
@@ -326,11 +341,14 @@ export function registerFlowTools(
   );
 
   // List embedded data fields
-  server.tool(
+  server.registerTool(
     "list_embedded_data",
-    "List all embedded data fields currently defined in a survey's flow",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      description: "List all embedded data fields currently defined in a survey's flow",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      },
     },
     withErrorHandling("list_embedded_data", async (args) => {
       const flowResult = await flowApi.getFlow(args.surveyId);
@@ -365,11 +383,14 @@ export function registerFlowTools(
   );
 
   // List web services in flow
-  server.tool(
+  server.registerTool(
     "list_web_services",
-    "List all Web Service elements currently defined in a survey's flow",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      description: "List all Web Service elements currently defined in a survey's flow",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      },
     },
     withErrorHandling("list_web_services", async (args) => {
       const flowResult = await flowApi.getFlow(args.surveyId);

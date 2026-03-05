@@ -16,6 +16,13 @@ export function toolSuccess(data: unknown): ToolResult {
   };
 }
 
+export function requireDeleteConfirmation(args: { confirmDelete?: boolean }): ToolResult | null {
+  if (args.confirmDelete !== true) {
+    return toolError("Destructive action: set confirmDelete to true to confirm deletion.");
+  }
+  return null;
+}
+
 export function withErrorHandling(
   name: string,
   handler: (args: any) => Promise<ToolResult>

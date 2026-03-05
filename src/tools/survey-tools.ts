@@ -13,13 +13,16 @@ export function registerSurveyTools(
   const surveyApi = new SurveyApi(client);
 
   // List surveys tool
-  server.tool(
+  server.registerTool(
     "list_surveys",
-    "List surveys with optional filtering and pagination",
     {
-      offset: z.number().optional().describe("Starting offset for pagination (default: 0)"),
-      limit: z.number().max(100).optional().describe("Maximum number of surveys to return (max: 100, default: 20)"),
-      filter: z.string().optional().describe("Filter surveys by name (case-insensitive partial match)"),
+      description: "List surveys with optional filtering and pagination",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        offset: z.number().optional().describe("Starting offset for pagination (default: 0)"),
+        limit: z.number().max(100).optional().describe("Maximum number of surveys to return (max: 100, default: 20)"),
+        filter: z.string().optional().describe("Filter surveys by name (case-insensitive partial match)"),
+      },
     },
     withErrorHandling("list_surveys", async (args) => {
       const surveys = await client.getSurveys(args.offset ?? 0, args.limit ?? 20);
@@ -49,12 +52,15 @@ export function registerSurveyTools(
   );
 
   // Get survey tool
-  server.tool(
+  server.registerTool(
     "get_survey",
-    "Get detailed information about a specific survey",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID (e.g., SV_123456789)"),
-      includeDefinition: z.boolean().optional().describe("Include full survey definition with questions and logic (default: false)"),
+      description: "Get detailed information about a specific survey",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID (e.g., SV_123456789)"),
+        includeDefinition: z.boolean().optional().describe("Include full survey definition with questions and logic (default: false)"),
+      },
     },
     withErrorHandling("get_survey", async (args) => {
       const [surveyInfo, surveyDefinition] = await Promise.all([
@@ -70,13 +76,16 @@ export function registerSurveyTools(
   );
 
   // Create survey tool
-  server.tool(
+  server.registerTool(
     "create_survey",
-    "Create a new survey in Qualtrics",
     {
-      name: z.string().min(1).describe("Name for the new survey"),
-      language: z.string().optional().describe("Survey language code (default: EN)"),
-      projectCategory: z.string().optional().describe("Project category (default: CORE)"),
+      description: "Create a new survey in Qualtrics",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        name: z.string().min(1).describe("Name for the new survey"),
+        language: z.string().optional().describe("Survey language code (default: EN)"),
+        projectCategory: z.string().optional().describe("Project category (default: CORE)"),
+      },
     },
     withErrorHandling("create_survey", async (args) => {
       const surveyData = {
@@ -97,12 +106,15 @@ export function registerSurveyTools(
   );
 
   // Estimate export size tool
-  server.tool(
+  server.registerTool(
     "estimate_export_size",
-    "Estimate the size of a survey export before downloading. Helps you decide whether to use saveToFile parameter or apply filters to reduce size.",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      format: z.enum(["json", "csv"]).optional().describe("Export format to estimate (default: json)"),
+      description: "Estimate the size of a survey export before downloading. Helps you decide whether to use saveToFile parameter or apply filters to reduce size.",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        format: z.enum(["json", "csv"]).optional().describe("Export format to estimate (default: json)"),
+      },
     },
     withErrorHandling("estimate_export_size", async (args) => {
       const [surveyInfo, surveyDefinition] = await Promise.all([
@@ -155,14 +167,17 @@ export function registerSurveyTools(
   );
 
   // Update survey tool
-  server.tool(
+  server.registerTool(
     "update_survey",
-    "Update survey metadata such as name, active status, or expiration",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      name: z.string().optional().describe("New survey name"),
-      isActive: z.boolean().optional().describe("Set survey active/inactive status"),
-      expiration: z.string().optional().describe("Survey expiration date (ISO format)"),
+      description: "Update survey metadata such as name, active status, or expiration",
+      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        name: z.string().optional().describe("New survey name"),
+        isActive: z.boolean().optional().describe("Set survey active/inactive status"),
+        expiration: z.string().optional().describe("Survey expiration date (ISO format)"),
+      },
     },
     withErrorHandling("update_survey", async (args) => {
       const data: Record<string, any> = {};
@@ -181,12 +196,15 @@ export function registerSurveyTools(
   );
 
   // Delete survey tool
-  server.tool(
+  server.registerTool(
     "delete_survey",
-    "Delete a survey. Requires name confirmation as a safety measure.",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      confirmName: z.string().min(1).describe("Type the survey name to confirm deletion"),
+      description: "Delete a survey. Requires name confirmation as a safety measure.",
+      annotations: { destructiveHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        confirmName: z.string().min(1).describe("Type the survey name to confirm deletion"),
+      },
     },
     withErrorHandling("delete_survey", async (args) => {
       // Verify the survey name matches
@@ -210,11 +228,14 @@ export function registerSurveyTools(
   );
 
   // Activate survey tool
-  server.tool(
+  server.registerTool(
     "activate_survey",
-    "Activate a survey to begin collecting responses",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      description: "Activate a survey to begin collecting responses",
+      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      },
     },
     withErrorHandling("activate_survey", async (args) => {
       const result = await surveyApi.activateSurvey(args.surveyId);
@@ -228,11 +249,14 @@ export function registerSurveyTools(
   );
 
   // Deactivate survey tool
-  server.tool(
+  server.registerTool(
     "deactivate_survey",
-    "Deactivate a survey to stop collecting responses",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      description: "Deactivate a survey to stop collecting responses",
+      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      },
     },
     withErrorHandling("deactivate_survey", async (args) => {
       const result = await surveyApi.deactivateSurvey(args.surveyId);

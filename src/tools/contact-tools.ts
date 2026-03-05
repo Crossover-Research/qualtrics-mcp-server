@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { QualtricsClient } from "../services/qualtrics-client.js";
 import { ContactApi } from "../services/contact-api.js";
 import { QualtricsConfig } from "../config/settings.js";
-import { toolSuccess, withErrorHandling } from "./_helpers.js";
+import { toolSuccess, withErrorHandling, requireDeleteConfirmation } from "./_helpers.js";
 
 export function registerContactTools(
   server: McpServer,
@@ -13,10 +13,12 @@ export function registerContactTools(
   const contactApi = new ContactApi(client);
 
   // List mailing lists
-  server.tool(
+  server.registerTool(
     "list_mailing_lists",
-    "List all mailing lists in your Qualtrics account",
-    {},
+    {
+      description: "List all mailing lists in your Qualtrics account",
+      annotations: { readOnlyHint: true },
+    },
     withErrorHandling("list_mailing_lists", async () => {
       const result = await contactApi.listMailingLists();
       const lists = result.result.elements || [];
@@ -35,12 +37,15 @@ export function registerContactTools(
   );
 
   // Create mailing list
-  server.tool(
+  server.registerTool(
     "create_mailing_list",
-    "Create a new mailing list for contact management and survey distribution",
     {
-      name: z.string().min(1).describe("Name for the mailing list"),
-      category: z.string().optional().describe("Category/folder for the mailing list"),
+      description: "Create a new mailing list for contact management and survey distribution",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        name: z.string().min(1).describe("Name for the mailing list"),
+        category: z.string().optional().describe("Category/folder for the mailing list"),
+      },
     },
     withErrorHandling("create_mailing_list", async (args) => {
       const data: Record<string, any> = { name: args.name };
@@ -57,13 +62,19 @@ export function registerContactTools(
   );
 
   // Delete mailing list
-  server.tool(
+  server.registerTool(
     "delete_mailing_list",
-    "Delete a mailing list",
     {
-      mailingListId: z.string().min(1).describe("The mailing list ID to delete"),
+      description: "Delete a mailing list",
+      annotations: { destructiveHint: true },
+      inputSchema: {
+        mailingListId: z.string().min(1).describe("The mailing list ID to delete"),
+        confirmDelete: z.boolean().describe("Must be true to confirm deletion"),
+      },
     },
     withErrorHandling("delete_mailing_list", async (args) => {
+      const guard = requireDeleteConfirmation(args);
+      if (guard) return guard;
       const result = await contactApi.deleteMailingList(args.mailingListId);
       return toolSuccess({
         success: true,
@@ -75,13 +86,16 @@ export function registerContactTools(
   );
 
   // List contacts
-  server.tool(
+  server.registerTool(
     "list_contacts",
-    "List contacts in a mailing list with pagination",
     {
-      mailingListId: z.string().min(1).describe("The mailing list ID"),
-      limit: z.number().optional().describe("Maximum number of contacts to return"),
-      offset: z.number().optional().describe("Starting offset for pagination"),
+      description: "List contacts in a mailing list with pagination",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        mailingListId: z.string().min(1).describe("The mailing list ID"),
+        limit: z.number().optional().describe("Maximum number of contacts to return"),
+        offset: z.number().optional().describe("Starting offset for pagination"),
+      },
     },
     withErrorHandling("list_contacts", async (args) => {
       const result = await contactApi.listContacts(args.mailingListId, args.offset, args.limit);
@@ -104,16 +118,19 @@ export function registerContactTools(
   );
 
   // Add contact
-  server.tool(
+  server.registerTool(
     "add_contact",
-    "Add a single contact to a mailing list",
     {
-      mailingListId: z.string().min(1).describe("The mailing list ID"),
-      email: z.string().min(1).describe("Contact email address"),
-      firstName: z.string().optional().describe("Contact first name"),
-      lastName: z.string().optional().describe("Contact last name"),
-      language: z.string().optional().describe("Contact language code (e.g., EN)"),
-      embeddedData: z.record(z.any()).optional().describe("Custom embedded data fields for the contact"),
+      description: "Add a single contact to a mailing list",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        mailingListId: z.string().min(1).describe("The mailing list ID"),
+        email: z.string().min(1).describe("Contact email address"),
+        firstName: z.string().optional().describe("Contact first name"),
+        lastName: z.string().optional().describe("Contact last name"),
+        language: z.string().optional().describe("Contact language code (e.g., EN)"),
+        embeddedData: z.record(z.any()).optional().describe("Custom embedded data fields for the contact"),
+      },
     },
     withErrorHandling("add_contact", async (args) => {
       const data: Record<string, any> = { email: args.email };
@@ -134,16 +151,19 @@ export function registerContactTools(
   );
 
   // Update contact
-  server.tool(
+  server.registerTool(
     "update_contact",
-    "Update an existing contact in a mailing list",
     {
-      mailingListId: z.string().min(1).describe("The mailing list ID"),
-      contactId: z.string().min(1).describe("The contact ID to update"),
-      email: z.string().optional().describe("Updated email address"),
-      firstName: z.string().optional().describe("Updated first name"),
-      lastName: z.string().optional().describe("Updated last name"),
-      embeddedData: z.record(z.any()).optional().describe("Updated embedded data fields"),
+      description: "Update an existing contact in a mailing list",
+      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: {
+        mailingListId: z.string().min(1).describe("The mailing list ID"),
+        contactId: z.string().min(1).describe("The contact ID to update"),
+        email: z.string().optional().describe("Updated email address"),
+        firstName: z.string().optional().describe("Updated first name"),
+        lastName: z.string().optional().describe("Updated last name"),
+        embeddedData: z.record(z.any()).optional().describe("Updated embedded data fields"),
+      },
     },
     withErrorHandling("update_contact", async (args) => {
       const data: Record<string, any> = {};
@@ -164,14 +184,20 @@ export function registerContactTools(
   );
 
   // Remove contact
-  server.tool(
+  server.registerTool(
     "remove_contact",
-    "Remove a contact from a mailing list",
     {
-      mailingListId: z.string().min(1).describe("The mailing list ID"),
-      contactId: z.string().min(1).describe("The contact ID to remove"),
+      description: "Remove a contact from a mailing list",
+      annotations: { destructiveHint: true },
+      inputSchema: {
+        mailingListId: z.string().min(1).describe("The mailing list ID"),
+        contactId: z.string().min(1).describe("The contact ID to remove"),
+        confirmDelete: z.boolean().describe("Must be true to confirm deletion"),
+      },
     },
     withErrorHandling("remove_contact", async (args) => {
+      const guard = requireDeleteConfirmation(args);
+      if (guard) return guard;
       const result = await contactApi.deleteContact(args.mailingListId, args.contactId);
       return toolSuccess({
         success: true,
@@ -184,18 +210,21 @@ export function registerContactTools(
   );
 
   // Bulk import contacts
-  server.tool(
+  server.registerTool(
     "bulk_import_contacts",
-    "Import multiple contacts into a mailing list at once",
     {
-      mailingListId: z.string().min(1).describe("The mailing list ID"),
-      contacts: z.array(z.object({
-        email: z.string().describe("Contact email address"),
-        firstName: z.string().optional().describe("Contact first name"),
-        lastName: z.string().optional().describe("Contact last name"),
-        language: z.string().optional().describe("Contact language code"),
-        embeddedData: z.record(z.any()).optional().describe("Custom embedded data"),
-      })).min(1).describe("Array of contacts to import"),
+      description: "Import multiple contacts into a mailing list at once",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        mailingListId: z.string().min(1).describe("The mailing list ID"),
+        contacts: z.array(z.object({
+          email: z.string().describe("Contact email address"),
+          firstName: z.string().optional().describe("Contact first name"),
+          lastName: z.string().optional().describe("Contact last name"),
+          language: z.string().optional().describe("Contact language code"),
+          embeddedData: z.record(z.any()).optional().describe("Custom embedded data"),
+        })).min(1).describe("Array of contacts to import"),
+      },
     },
     withErrorHandling("bulk_import_contacts", async (args) => {
       const result = await contactApi.bulkImportContacts(args.mailingListId, args.contacts);
