@@ -74,11 +74,14 @@ A Model Context Protocol (MCP) server that gives Claude full control over the Qu
 ### Users
 - `list_users` / `get_user`
 
+### Server Control
+- `set_read_only_mode` — Toggle read-only mode at runtime (blocks all write/update/delete operations)
+
 ## Setup
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - Qualtrics API token with appropriate permissions
 - Qualtrics data center ID
 
@@ -87,7 +90,7 @@ A Model Context Protocol (MCP) server that gives Claude full control over the Qu
 ```bash
 git clone https://github.com/yrvelez/qualtrics-mcp-server.git
 cd qualtrics-mcp-server
-npm install
+pnpm install
 ```
 
 Configure environment variables:
@@ -95,12 +98,6 @@ Configure environment variables:
 ```bash
 cp .env.example .env
 # Edit .env with your Qualtrics credentials
-```
-
-Build:
-
-```bash
-npm run build
 ```
 
 ### Configuration
@@ -112,9 +109,14 @@ Set these in your `.env` file:
 | `QUALTRICS_API_TOKEN` | Yes | — | Your Qualtrics API token |
 | `QUALTRICS_DATA_CENTER` | Yes | — | Data center ID (e.g., `yul1`) |
 | `QUALTRICS_BASE_URL` | No | Auto-generated | Custom base URL override |
+| `QUALTRICS_READ_ONLY` | No | `false` | Block all write/delete operations (safe exploration mode) |
 | `RATE_LIMITING_ENABLED` | No | `true` | Enable/disable rate limiting |
 | `RATE_LIMIT_RPM` | No | `50` | Requests per minute |
 | `REQUEST_TIMEOUT` | No | `30000` | Request timeout in ms |
+
+### Read-Only Mode
+
+Set `QUALTRICS_READ_ONLY=true` to block all write, update, and delete operations. This is useful for safely exploring surveys and exporting data without risk of accidental changes. You can also toggle this at runtime using the `set_read_only_mode` tool.
 
 ### Claude Desktop Integration
 
@@ -124,8 +126,8 @@ Add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "qualtrics": {
-      "command": "node",
-      "args": ["/path/to/qualtrics-mcp-server/build/index.js"],
+      "command": "npx",
+      "args": ["tsx", "/path/to/qualtrics-mcp-server/src/index.ts"],
       "env": {
         "QUALTRICS_API_TOKEN": "your_api_token",
         "QUALTRICS_DATA_CENTER": "your_data_center_id"
@@ -161,28 +163,13 @@ Once configured, ask Claude things like:
 - "Add a web service call to my API that sets the stimulus condition"
 - "What piped text syntax do I use to reference embedded data?"
 
-## Examples
-
-See [`examples/motivated-reasoning-study.ts`](examples/motivated-reasoning-study.ts) for a complete script that builds a multi-block experimental survey with:
-
-- 10 survey blocks (consent, issue identification, pre/post measures, randomized treatment arms, demographics, debriefing)
-- JS-powered questions that call OpenAI GPT-4o from within Qualtrics to generate tailored belief items and counterarguments
-- BlockRandomizer flow with treatment vs. placebo conditions
-- Embedded data piping for dynamic question text
-
-Run it with:
-
-```bash
-set -a && source .env && set +a && npx tsx examples/motivated-reasoning-study.ts
-```
-
 ## Architecture
 
 ```
 src/
   config/settings.ts          — Environment config with Zod validation
   services/
-    qualtrics-client.ts       — HTTP client with auth, rate limiting, timeouts
+    qualtrics-client.ts       — HTTP client with auth, rate limiting, read-only enforcement
     survey-api.ts             — Survey + question + block CRUD
     flow-api.ts               — Survey flow management
     response-api.ts           — Response export + individual response CRUD
@@ -209,10 +196,9 @@ src/
 ## Development
 
 ```bash
-npm run dev          # Run with tsx in development mode
-npm run build        # Compile TypeScript
-npm test             # Run tests with vitest
-npm run inspector    # Launch MCP Inspector for debugging
+pnpm start          # Run the server
+pnpm dev             # Run with file watching
+pnpm typecheck       # Type check with tsgo
 ```
 
 ## Troubleshooting
