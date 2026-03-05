@@ -8,7 +8,8 @@ async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
   } catch (error) {
-    console.error("Failed to start Qualtrics MCP server:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
     process.exit(1);
   }
 }

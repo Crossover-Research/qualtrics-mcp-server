@@ -9,6 +9,12 @@ export class QualtricsClient {
   private apiToken: string;
   private rateLimiter: RateLimiter;
   private timeout: number;
+  public readOnly: boolean;
+
+  /** Endpoints that use POST but are actually read operations. */
+  private static readonly READ_ONLY_POST_ALLOWLIST = [
+    /\/export-responses$/,
+  ];
 
   constructor(config: QualtricsConfig) {
     this.baseUrl = config.qualtrics.baseUrl ||
@@ -16,12 +22,25 @@ export class QualtricsClient {
     this.apiToken = config.qualtrics.apiToken;
     this.rateLimiter = new RateLimiter(config.server.rateLimiting);
     this.timeout = config.server.timeout;
+    this.readOnly = config.server.readOnly;
   }
 
   public async makeRequest<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    const method = (options.method ?? "GET").toUpperCase();
+    if (this.readOnly && method !== "GET") {
+      const isAllowlisted = QualtricsClient.READ_ONLY_POST_ALLOWLIST.some(
+        (pattern) => pattern.test(endpoint)
+      );
+      if (!isAllowlisted) {
+        throw new Error(
+          `Read-only mode: ${method} ${endpoint} blocked. Set QUALTRICS_READ_ONLY=false to enable write operations.`
+        );
+      }
+    }
+
     await this.rateLimiter.checkLimit();
 
     const controller = new AbortController();

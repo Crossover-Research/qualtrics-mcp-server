@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__qualtrics__list_surveys",
+      "mcp__qualtrics__export_responses_filtered",
+      "mcp__qualtrics__list_questions",
+      "Bash(python3:*)",
+      "mcp__qualtrics__estimate_export_size",
+      "mcp__qualtrics__check_export_status",
+      "mcp__qualtrics__get_survey",
+      "mcp__qualtrics__list_blocks",
+      "mcp__qualtrics__get_survey_flow",
+      "mcp__qualtrics__update_survey"
+    ]
+  }
+}

@@ -13,12 +13,15 @@ export function registerUserTools(
   const userApi = new UserApi(client);
 
   // List users
-  server.tool(
+  server.registerTool(
     "list_users",
-    "List users in your Qualtrics organization",
     {
-      limit: z.number().optional().describe("Maximum number of users to return"),
-      offset: z.number().optional().describe("Starting offset for pagination"),
+      description: "List users in your Qualtrics organization",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        limit: z.number().optional().describe("Maximum number of users to return"),
+        offset: z.number().optional().describe("Starting offset for pagination"),
+      },
     },
     withErrorHandling("list_users", async (args) => {
       const result = await userApi.listUsers(args.offset, args.limit);
@@ -41,11 +44,14 @@ export function registerUserTools(
   );
 
   // Get user
-  server.tool(
+  server.registerTool(
     "get_user",
-    "Get detailed information about a specific user",
     {
-      userId: z.string().min(1).describe("The user ID"),
+      description: "Get detailed information about a specific user",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        userId: z.string().min(1).describe("The user ID"),
+      },
     },
     withErrorHandling("get_user", async (args) => {
       const result = await userApi.getUser(args.userId);

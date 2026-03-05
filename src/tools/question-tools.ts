@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { QualtricsClient } from "../services/qualtrics-client.js";
 import { SurveyApi } from "../services/survey-api.js";
 import { QualtricsConfig } from "../config/settings.js";
-import { toolError, toolSuccess, withErrorHandling } from "./_helpers.js";
+import { toolError, toolSuccess, withErrorHandling, requireDeleteConfirmation } from "./_helpers.js";
 
 let questionCounter = 0;
 function nextExportTag(): string {
@@ -42,11 +42,14 @@ export function registerQuestionTools(
   const surveyApi = new SurveyApi(client);
 
   // List questions
-  server.tool(
+  server.registerTool(
     "list_questions",
-    "List all questions in a survey with their types and a preview of the question text",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      description: "List all questions in a survey with their types and a preview of the question text",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      },
     },
     withErrorHandling("list_questions", async (args) => {
       const result = await surveyApi.listQuestions(args.surveyId);
@@ -71,12 +74,15 @@ export function registerQuestionTools(
   );
 
   // Get question
-  server.tool(
+  server.registerTool(
     "get_question",
-    "Get the full definition of a specific question including choices, validation, and configuration",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      questionId: z.string().min(1).describe("The question ID (e.g., QID1)"),
+      description: "Get the full definition of a specific question including choices, validation, and configuration",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        questionId: z.string().min(1).describe("The question ID (e.g., QID1)"),
+      },
     },
     withErrorHandling("get_question", async (args) => {
       const result = await surveyApi.getQuestion(args.surveyId, args.questionId);
@@ -88,21 +94,24 @@ export function registerQuestionTools(
   );
 
   // Create question (raw)
-  server.tool(
+  server.registerTool(
     "create_question",
-    "Create a question in a survey block. For simplified helpers, use add_multiple_choice_question, add_text_entry_question, add_descriptive_text_question, add_likert_question, or add_matrix_question instead.",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      blockId: z.string().min(1).describe("The block ID to add the question to"),
-      questionText: z.string().min(1).describe("The question text (HTML supported)"),
-      questionType: z.string().min(1).describe("Qualtrics question type (e.g., MC, TE, Matrix, Slider, RO, DB)"),
-      selector: z.string().min(1).describe("Question selector (e.g., SAVR, MAVR, SL, ML, Likert, TB)"),
-      subSelector: z.string().optional().describe("Sub-selector if applicable (e.g., TX, SingleAnswer)"),
-      choices: z.record(z.object({
-        Display: z.string(),
-      })).optional().describe("Choice definitions keyed by choice number"),
-      validation: z.record(z.any()).optional().describe("Validation settings"),
-      questionJS: z.string().optional().describe(QUESTION_JS_DESC),
+      description: "Create a question in a survey block. For simplified helpers, use add_multiple_choice_question, add_text_entry_question, add_descriptive_text_question, add_likert_question, or add_matrix_question instead.",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        blockId: z.string().min(1).describe("The block ID to add the question to"),
+        questionText: z.string().min(1).describe("The question text (HTML supported)"),
+        questionType: z.string().min(1).describe("Qualtrics question type (e.g., MC, TE, Matrix, Slider, RO, DB)"),
+        selector: z.string().min(1).describe("Question selector (e.g., SAVR, MAVR, SL, ML, Likert, TB)"),
+        subSelector: z.string().optional().describe("Sub-selector if applicable (e.g., TX, SingleAnswer)"),
+        choices: z.record(z.object({
+          Display: z.string(),
+        })).optional().describe("Choice definitions keyed by choice number"),
+        validation: z.record(z.any()).optional().describe("Validation settings"),
+        questionJS: z.string().optional().describe(QUESTION_JS_DESC),
+      },
     },
     withErrorHandling("create_question", async (args) => {
       const questionData: Record<string, any> = {
@@ -137,18 +146,21 @@ export function registerQuestionTools(
   );
 
   // Update question
-  server.tool(
+  server.registerTool(
     "update_question",
-    "Update an existing question's text, choices, validation, or JavaScript",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      questionId: z.string().min(1).describe("The question ID to update"),
-      questionText: z.string().optional().describe("New question text"),
-      choices: z.record(z.object({
-        Display: z.string(),
-      })).optional().describe("Updated choice definitions"),
-      validation: z.record(z.any()).optional().describe("Updated validation settings"),
-      questionJS: z.string().optional().describe(QUESTION_JS_DESC + ' Pass empty string "" to clear existing JS.'),
+      description: "Update an existing question's text, choices, validation, or JavaScript",
+      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        questionId: z.string().min(1).describe("The question ID to update"),
+        questionText: z.string().optional().describe("New question text"),
+        choices: z.record(z.object({
+          Display: z.string(),
+        })).optional().describe("Updated choice definitions"),
+        validation: z.record(z.any()).optional().describe("Updated validation settings"),
+        questionJS: z.string().optional().describe(QUESTION_JS_DESC + ' Pass empty string "" to clear existing JS.'),
+      },
     },
     withErrorHandling("update_question", async (args) => {
       // Qualtrics PUT requires QuestionType — auto-fetch current question
@@ -184,14 +196,20 @@ export function registerQuestionTools(
   );
 
   // Delete question
-  server.tool(
+  server.registerTool(
     "delete_question",
-    "Remove a question from a survey",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      questionId: z.string().min(1).describe("The question ID to delete"),
+      description: "Remove a question from a survey",
+      annotations: { destructiveHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        questionId: z.string().min(1).describe("The question ID to delete"),
+        confirmDelete: z.boolean().describe("Must be true to confirm deletion"),
+      },
     },
     withErrorHandling("delete_question", async (args) => {
+      const guard = requireDeleteConfirmation(args);
+      if (guard) return guard;
       const result = await surveyApi.deleteQuestion(args.surveyId, args.questionId);
       return toolSuccess({
         success: true,
@@ -204,16 +222,19 @@ export function registerQuestionTools(
   );
 
   // Add multiple choice question (simplified)
-  server.tool(
+  server.registerTool(
     "add_multiple_choice_question",
-    "Simplified helper to create a multiple choice question. Automatically maps to the correct Qualtrics QuestionType/Selector.",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      blockId: z.string().min(1).describe("The block ID to add the question to"),
-      questionText: z.string().min(1).describe("The question text"),
-      choices: z.array(z.string()).min(2).describe("Array of choice labels (e.g., ['Yes', 'No', 'Maybe'])"),
-      allowMultiple: z.boolean().optional().describe("Allow selecting multiple choices (default: false)"),
-      forceResponse: z.boolean().optional().describe("Require a response (default: false)"),
+      description: "Simplified helper to create a multiple choice question. Automatically maps to the correct Qualtrics QuestionType/Selector.",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        blockId: z.string().min(1).describe("The block ID to add the question to"),
+        questionText: z.string().min(1).describe("The question text"),
+        choices: z.array(z.string()).min(2).describe("Array of choice labels (e.g., ['Yes', 'No', 'Maybe'])"),
+        allowMultiple: z.boolean().optional().describe("Allow selecting multiple choices (default: false)"),
+        forceResponse: z.boolean().optional().describe("Require a response (default: false)"),
+      },
     },
     withErrorHandling("add_multiple_choice_question", async (args) => {
       const choicesObj: Record<string, { Display: string }> = {};
@@ -254,15 +275,18 @@ export function registerQuestionTools(
   );
 
   // Add text entry question (simplified)
-  server.tool(
+  server.registerTool(
     "add_text_entry_question",
-    "Simplified helper to create a text entry question (single line, multi line, or essay).",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      blockId: z.string().min(1).describe("The block ID to add the question to"),
-      questionText: z.string().min(1).describe("The question text"),
-      textType: z.enum(["single", "multi", "essay"]).describe("Text entry type: single line, multi line, or essay"),
-      forceResponse: z.boolean().optional().describe("Require a response (default: false)"),
+      description: "Simplified helper to create a text entry question (single line, multi line, or essay).",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        blockId: z.string().min(1).describe("The block ID to add the question to"),
+        questionText: z.string().min(1).describe("The question text"),
+        textType: z.enum(["single", "multi", "essay"]).describe("Text entry type: single line, multi line, or essay"),
+        forceResponse: z.boolean().optional().describe("Require a response (default: false)"),
+      },
     },
     withErrorHandling("add_text_entry_question", async (args) => {
       const selectorMap: Record<string, string> = {
@@ -301,14 +325,17 @@ export function registerQuestionTools(
   );
 
   // Add descriptive text question (simplified)
-  server.tool(
+  server.registerTool(
     "add_descriptive_text_question",
-    "Simplified helper to create a descriptive text (DB/TB) question — commonly used for instructions, processing screens, or HTML content with optional JavaScript.",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      blockId: z.string().min(1).describe("The block ID to add the question to"),
-      htmlContent: z.string().min(1).describe("The HTML content to display"),
-      questionJS: z.string().optional().describe(QUESTION_JS_DESC),
+      description: "Simplified helper to create a descriptive text (DB/TB) question — commonly used for instructions, processing screens, or HTML content with optional JavaScript.",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        blockId: z.string().min(1).describe("The block ID to add the question to"),
+        htmlContent: z.string().min(1).describe("The HTML content to display"),
+        questionJS: z.string().optional().describe(QUESTION_JS_DESC),
+      },
     },
     withErrorHandling("add_descriptive_text_question", async (args) => {
       const questionData: Record<string, any> = {
@@ -340,18 +367,21 @@ export function registerQuestionTools(
   );
 
   // Add Likert question (simplified single-item MC/SAVR)
-  server.tool(
+  server.registerTool(
     "add_likert_question",
-    "Simplified helper to create a single-item Likert scale as MC/SAVR. Includes preset scales so you don't have to enumerate choices manually.",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      blockId: z.string().min(1).describe("The block ID to add the question to"),
-      questionText: z.string().min(1).describe("The question text"),
-      scale: z.enum(["agree5", "agree7", "frequency5", "satisfaction5", "likelihood5", "custom"]).describe(
-        "Preset scale: agree5 (Strongly Disagree→Strongly Agree 5pt), agree7 (7pt), frequency5 (Never→Always), satisfaction5 (Very Dissatisfied→Very Satisfied), likelihood5 (Very Unlikely→Very Likely), or custom (provide customLabels)"
-      ),
-      customLabels: z.array(z.string()).optional().describe("Custom scale labels (required when scale is 'custom', minimum 2 items)"),
-      forceResponse: z.boolean().optional().describe("Require a response (default: false)"),
+      description: "Simplified helper to create a single-item Likert scale as MC/SAVR. Includes preset scales so you don't have to enumerate choices manually.",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        blockId: z.string().min(1).describe("The block ID to add the question to"),
+        questionText: z.string().min(1).describe("The question text"),
+        scale: z.enum(["agree5", "agree7", "frequency5", "satisfaction5", "likelihood5", "custom"]).describe(
+          "Preset scale: agree5 (Strongly Disagree→Strongly Agree 5pt), agree7 (7pt), frequency5 (Never→Always), satisfaction5 (Very Dissatisfied→Very Satisfied), likelihood5 (Very Unlikely→Very Likely), or custom (provide customLabels)"
+        ),
+        customLabels: z.array(z.string()).optional().describe("Custom scale labels (required when scale is 'custom', minimum 2 items)"),
+        forceResponse: z.boolean().optional().describe("Require a response (default: false)"),
+      },
     },
     withErrorHandling("add_likert_question", async (args) => {
       const presets: Record<string, string[]> = {
@@ -412,16 +442,19 @@ export function registerQuestionTools(
   );
 
   // Add matrix question (simplified)
-  server.tool(
+  server.registerTool(
     "add_matrix_question",
-    "Simplified helper to create a Likert/matrix question with statements and scale points.",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      blockId: z.string().min(1).describe("The block ID to add the question to"),
-      questionText: z.string().min(1).describe("The question text/instructions"),
-      statements: z.array(z.string()).min(1).describe("Array of statement/row labels"),
-      scalePoints: z.array(z.string()).min(2).describe("Array of scale point labels (e.g., ['Strongly Disagree', ..., 'Strongly Agree'])"),
-      forceResponse: z.boolean().optional().describe("Require a response for all statements (default: false)"),
+      description: "Simplified helper to create a Likert/matrix question with statements and scale points.",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        blockId: z.string().min(1).describe("The block ID to add the question to"),
+        questionText: z.string().min(1).describe("The question text/instructions"),
+        statements: z.array(z.string()).min(1).describe("Array of statement/row labels"),
+        scalePoints: z.array(z.string()).min(2).describe("Array of scale point labels (e.g., ['Strongly Disagree', ..., 'Strongly Agree'])"),
+        forceResponse: z.boolean().optional().describe("Require a response for all statements (default: false)"),
+      },
     },
     withErrorHandling("add_matrix_question", async (args) => {
       const choices: Record<string, { Display: string }> = {};

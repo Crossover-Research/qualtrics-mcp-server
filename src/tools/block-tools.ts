@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { QualtricsClient } from "../services/qualtrics-client.js";
 import { SurveyApi } from "../services/survey-api.js";
 import { QualtricsConfig } from "../config/settings.js";
-import { toolSuccess, withErrorHandling } from "./_helpers.js";
+import { toolSuccess, withErrorHandling, requireDeleteConfirmation } from "./_helpers.js";
 
 export function registerBlockTools(
   server: McpServer,
@@ -13,11 +13,14 @@ export function registerBlockTools(
   const surveyApi = new SurveyApi(client);
 
   // List blocks
-  server.tool(
+  server.registerTool(
     "list_blocks",
-    "List all blocks in a survey",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      description: "List all blocks in a survey",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+      },
     },
     withErrorHandling("list_blocks", async (args) => {
       const result = await surveyApi.listBlocks(args.surveyId);
@@ -44,13 +47,16 @@ export function registerBlockTools(
   );
 
   // Create block
-  server.tool(
+  server.registerTool(
     "create_block",
-    "Create a new block in a survey",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      description: z.string().min(1).describe("Block description/name"),
-      type: z.string().optional().describe("Block type (default: Standard)"),
+      description: "Create a new block in a survey",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        description: z.string().min(1).describe("Block description/name"),
+        type: z.string().optional().describe("Block type (default: Standard)"),
+      },
     },
     withErrorHandling("create_block", async (args) => {
       const data: Record<string, any> = {
@@ -70,14 +76,17 @@ export function registerBlockTools(
   );
 
   // Update block
-  server.tool(
+  server.registerTool(
     "update_block",
-    "Update a block's description or settings. The Qualtrics API requires a block Type in the body — if omitted, the current type is auto-fetched.",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      blockId: z.string().min(1).describe("The block ID to update"),
-      description: z.string().optional().describe("New block description"),
-      type: z.string().optional().describe("Block type (e.g., Standard, Default, Trash). If omitted, the current type is auto-fetched."),
+      description: "Update a block's description or settings. The Qualtrics API requires a block Type in the body — if omitted, the current type is auto-fetched.",
+      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        blockId: z.string().min(1).describe("The block ID to update"),
+        description: z.string().optional().describe("New block description"),
+        type: z.string().optional().describe("Block type (e.g., Standard, Default, Trash). If omitted, the current type is auto-fetched."),
+      },
     },
     withErrorHandling("update_block", async (args) => {
       let blockType = args.type;
@@ -101,14 +110,20 @@ export function registerBlockTools(
   );
 
   // Delete block
-  server.tool(
+  server.registerTool(
     "delete_block",
-    "Remove a block from a survey",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      blockId: z.string().min(1).describe("The block ID to delete"),
+      description: "Remove a block from a survey",
+      annotations: { destructiveHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        blockId: z.string().min(1).describe("The block ID to delete"),
+        confirmDelete: z.boolean().describe("Must be true to confirm deletion"),
+      },
     },
     withErrorHandling("delete_block", async (args) => {
+      const guard = requireDeleteConfirmation(args);
+      if (guard) return guard;
       const result = await surveyApi.deleteBlock(args.surveyId, args.blockId);
       return toolSuccess({
         success: true,

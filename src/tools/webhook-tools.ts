@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { QualtricsClient } from "../services/qualtrics-client.js";
 import { WebhookApi } from "../services/webhook-api.js";
 import { QualtricsConfig } from "../config/settings.js";
-import { toolSuccess, withErrorHandling } from "./_helpers.js";
+import { toolSuccess, withErrorHandling, requireDeleteConfirmation } from "./_helpers.js";
 
 export function registerWebhookTools(
   server: McpServer,
@@ -13,10 +13,12 @@ export function registerWebhookTools(
   const webhookApi = new WebhookApi(client);
 
   // List webhooks
-  server.tool(
+  server.registerTool(
     "list_webhooks",
-    "List all event subscriptions (webhooks) in your Qualtrics account",
-    {},
+    {
+      description: "List all event subscriptions (webhooks) in your Qualtrics account",
+      annotations: { readOnlyHint: true },
+    },
     withErrorHandling("list_webhooks", async () => {
       const result = await webhookApi.listWebhooks();
       const subscriptions = result.result.elements || [];
@@ -36,13 +38,16 @@ export function registerWebhookTools(
   );
 
   // Create webhook
-  server.tool(
+  server.registerTool(
     "create_webhook",
-    "Create an event subscription (webhook) to receive notifications for Qualtrics events",
     {
-      topics: z.string().min(1).describe("Event topic to subscribe to (e.g., 'controlpanel.activateSurvey', 'completedResponse.{surveyId}')"),
-      publicationUrl: z.string().min(1).describe("URL to receive webhook notifications"),
-      encrypted: z.boolean().optional().describe("Whether to encrypt the webhook payload (default: false)"),
+      description: "Create an event subscription (webhook) to receive notifications for Qualtrics events",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        topics: z.string().min(1).describe("Event topic to subscribe to (e.g., 'controlpanel.activateSurvey', 'completedResponse.{surveyId}')"),
+        publicationUrl: z.string().min(1).describe("URL to receive webhook notifications"),
+        encrypted: z.boolean().optional().describe("Whether to encrypt the webhook payload (default: false)"),
+      },
     },
     withErrorHandling("create_webhook", async (args) => {
       const data: Record<string, any> = {
@@ -62,13 +67,19 @@ export function registerWebhookTools(
   );
 
   // Delete webhook
-  server.tool(
+  server.registerTool(
     "delete_webhook",
-    "Delete an event subscription (webhook)",
     {
-      subscriptionId: z.string().min(1).describe("The subscription ID to delete"),
+      description: "Delete an event subscription (webhook)",
+      annotations: { destructiveHint: true },
+      inputSchema: {
+        subscriptionId: z.string().min(1).describe("The subscription ID to delete"),
+        confirmDelete: z.boolean().describe("Must be true to confirm deletion"),
+      },
     },
     withErrorHandling("delete_webhook", async (args) => {
+      const guard = requireDeleteConfirmation(args);
+      if (guard) return guard;
       const result = await webhookApi.deleteWebhook(args.subscriptionId);
       return toolSuccess({
         success: true,

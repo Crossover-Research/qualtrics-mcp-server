@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { QualtricsClient } from "../services/qualtrics-client.js";
 import { ResponseApi } from "../services/response-api.js";
 import { QualtricsConfig } from "../config/settings.js";
-import { toolSuccess, withErrorHandling } from "./_helpers.js";
+import { toolSuccess, withErrorHandling, requireDeleteConfirmation } from "./_helpers.js";
 import { saveExportToFile } from "../utils/file-save.js";
 
 export function registerResponseTools(
@@ -14,14 +14,17 @@ export function registerResponseTools(
   const responseApi = new ResponseApi(client);
 
   // Export responses tool
-  server.tool(
+  server.registerTool(
     "export_responses",
-    "Export survey responses in JSON or CSV format. IMPORTANT: This tool will automatically save large exports to a local file to avoid context limits. Small exports may be returned directly. For better control over data size, consider using 'export_responses_filtered' with date ranges, specific questions, or completion filters.",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      format: z.enum(["json", "csv"]).optional().describe("Export format (default: json)"),
-      waitForCompletion: z.boolean().optional().describe("Wait for export to complete before returning (default: true)"),
-      saveToFile: z.string().optional().describe("RECOMMENDED: Specify a filename (e.g. 'survey_data.csv') to save the export to your Downloads folder. The tool will provide the full file path for easy access. If omitted, large files will be auto-saved with a timestamp."),
+      description: "Export survey responses in JSON or CSV format. IMPORTANT: This tool will automatically save large exports to a local file to avoid context limits. Small exports may be returned directly. For better control over data size, consider using 'export_responses_filtered' with date ranges, specific questions, or completion filters.",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        format: z.enum(["json", "csv"]).optional().describe("Export format (default: json)"),
+        waitForCompletion: z.boolean().optional().describe("Wait for export to complete before returning (default: true)"),
+        saveToFile: z.string().optional().describe("RECOMMENDED: Specify a filename (e.g. 'survey_data.csv') to save the export to your Downloads folder. The tool will provide the full file path for easy access. If omitted, large files will be auto-saved with a timestamp."),
+      },
     },
     async (args) => {
       try {
@@ -140,12 +143,15 @@ export function registerResponseTools(
   );
 
   // Check export status tool
-  server.tool(
+  server.registerTool(
     "check_export_status",
-    "Check the status of a response export job",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      exportProgressId: z.string().min(1).describe("The export progress ID returned from export_responses"),
+      description: "Check the status of a response export job",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        exportProgressId: z.string().min(1).describe("The export progress ID returned from export_responses"),
+      },
     },
     withErrorHandling("check_export_status", async (args) => {
       const progress = await client.getResponseExportProgress(args.surveyId, args.exportProgressId);
@@ -161,21 +167,24 @@ export function registerResponseTools(
   );
 
   // Filtered export responses tool
-  server.tool(
+  server.registerTool(
     "export_responses_filtered",
-    "Export survey responses with filters to reduce data size. RECOMMENDED for large surveys or when analyzing specific subsets. Use date filters, question selection, or completion status to create manageable datasets for analysis. Large exports will be automatically saved to your Downloads folder.",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      format: z.enum(["json", "csv"]).optional().describe("Export format (default: json)"),
-      waitForCompletion: z.boolean().optional().describe("Wait for export to complete before returning (default: true)"),
-      saveToFile: z.string().optional().describe("RECOMMENDED: Specify a filename (e.g. 'filtered_survey.csv') to save the export to your Downloads folder."),
-      startDate: z.string().optional().describe("Start date filter (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)"),
-      endDate: z.string().optional().describe("End date filter (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)"),
-      filterType: z.enum(["complete", "incomplete", "all"]).optional().describe("Response completion filter (default: all)"),
-      includeDisplayOrder: z.boolean().optional().describe("Include display order in export (default: true)"),
-      useLabels: z.boolean().optional().describe("Use choice labels instead of values (default: false)"),
-      questionIds: z.array(z.string()).optional().describe("Specific question IDs to include (export only these questions) - HIGHLY RECOMMENDED for large surveys to reduce file size"),
-      embeddedDataIds: z.array(z.string()).optional().describe("Specific embedded data fields to include - helps reduce unnecessary metadata"),
+      description: "Export survey responses with filters to reduce data size. RECOMMENDED for large surveys or when analyzing specific subsets. Use date filters, question selection, or completion status to create manageable datasets for analysis. Large exports will be automatically saved to your Downloads folder.",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        format: z.enum(["json", "csv"]).optional().describe("Export format (default: json)"),
+        waitForCompletion: z.boolean().optional().describe("Wait for export to complete before returning (default: true)"),
+        saveToFile: z.string().optional().describe("RECOMMENDED: Specify a filename (e.g. 'filtered_survey.csv') to save the export to your Downloads folder."),
+        startDate: z.string().optional().describe("Start date filter (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)"),
+        endDate: z.string().optional().describe("End date filter (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)"),
+        filterType: z.enum(["complete", "incomplete", "all"]).optional().describe("Response completion filter (default: all)"),
+        includeDisplayOrder: z.boolean().optional().describe("Include display order in export (default: true)"),
+        useLabels: z.boolean().optional().describe("Use choice labels instead of values (default: false)"),
+        questionIds: z.array(z.string()).optional().describe("Specific question IDs to include (export only these questions) - HIGHLY RECOMMENDED for large surveys to reduce file size"),
+        embeddedDataIds: z.array(z.string()).optional().describe("Specific embedded data fields to include - helps reduce unnecessary metadata"),
+      },
     },
     async (args) => {
       try {
@@ -322,12 +331,15 @@ export function registerResponseTools(
   );
 
   // Get single response
-  server.tool(
+  server.registerTool(
     "get_response",
-    "Get a single survey response by its response ID",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      responseId: z.string().min(1).describe("The response ID (e.g., R_123456789)"),
+      description: "Get a single survey response by its response ID",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        responseId: z.string().min(1).describe("The response ID (e.g., R_123456789)"),
+      },
     },
     withErrorHandling("get_response", async (args) => {
       const result = await responseApi.getResponse(args.surveyId, args.responseId);
@@ -340,13 +352,16 @@ export function registerResponseTools(
   );
 
   // Create response
-  server.tool(
+  server.registerTool(
     "create_response",
-    "Import/create a response for a survey programmatically",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      values: z.record(z.any()).describe("Response values keyed by question ID (e.g., { 'QID1': 1, 'QID2': 'text answer' })"),
-      embeddedData: z.record(z.any()).optional().describe("Embedded data fields to include with the response"),
+      description: "Import/create a response for a survey programmatically",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        values: z.record(z.any()).describe("Response values keyed by question ID (e.g., { 'QID1': 1, 'QID2': 'text answer' })"),
+        embeddedData: z.record(z.any()).optional().describe("Embedded data fields to include with the response"),
+      },
     },
     withErrorHandling("create_response", async (args) => {
       const data: Record<string, any> = { values: args.values };
@@ -364,14 +379,17 @@ export function registerResponseTools(
   );
 
   // Update response
-  server.tool(
+  server.registerTool(
     "update_response",
-    "Update an existing survey response",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      responseId: z.string().min(1).describe("The response ID to update"),
-      values: z.record(z.any()).describe("Updated response values keyed by question ID"),
-      embeddedData: z.record(z.any()).optional().describe("Updated embedded data fields"),
+      description: "Update an existing survey response",
+      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        responseId: z.string().min(1).describe("The response ID to update"),
+        values: z.record(z.any()).describe("Updated response values keyed by question ID"),
+        embeddedData: z.record(z.any()).optional().describe("Updated embedded data fields"),
+      },
     },
     withErrorHandling("update_response", async (args) => {
       const data: Record<string, any> = { values: args.values };
@@ -389,14 +407,20 @@ export function registerResponseTools(
   );
 
   // Delete response
-  server.tool(
+  server.registerTool(
     "delete_response",
-    "Delete a survey response",
     {
-      surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
-      responseId: z.string().min(1).describe("The response ID to delete"),
+      description: "Delete a survey response",
+      annotations: { destructiveHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        responseId: z.string().min(1).describe("The response ID to delete"),
+        confirmDelete: z.boolean().describe("Must be true to confirm deletion"),
+      },
     },
     withErrorHandling("delete_response", async (args) => {
+      const guard = requireDeleteConfirmation(args);
+      if (guard) return guard;
       const result = await responseApi.deleteResponse(args.surveyId, args.responseId);
       return toolSuccess({
         success: true,
