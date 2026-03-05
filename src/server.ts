@@ -9,7 +9,7 @@ export async function createQualtricsServer() {
   const qualtricsClient = new QualtricsClient(config);
 
   const readOnlyInstructions = qualtricsClient.readOnly
-    ? "This server is running in READ-ONLY mode (the safe default). All write, update, and delete operations are blocked. If the user asks to create, update, or delete something, let them know they are in read-only mode and offer to switch to read-write mode by calling set_read_only_mode. No environment variable changes are needed."
+    ? "This server is running in READ-ONLY mode (the safe default). All write, update, and delete operations are blocked. If the user asks to create, update, or delete something, let them know they are in read-only mode and offer to switch to read-write mode by calling set_read_only_mode. No environment variable changes are needed. IMPORTANT: Before disabling read-only mode, clearly warn the user that read-write mode allows operations that can permanently modify or delete surveys, contacts, and other Qualtrics data. Deleted Qualtrics data cannot be recovered. Ask the user to confirm they understand these risks before proceeding."
     : "This server is in READ-WRITE mode. Destructive tools (delete) require confirmDelete: true. The user can call set_read_only_mode to re-enable read-only mode at any time for safe exploration.";
 
   const server = new McpServer({
@@ -39,8 +39,11 @@ export async function createQualtricsServer() {
       qualtricsClient.readOnly = args.enabled;
       const status = args.enabled ? "READ-ONLY" : "READ-WRITE";
       console.error(`Qualtrics MCP Server mode changed to ${status}`);
+      const message = args.enabled
+        ? "Read-only mode enabled. Server is now in READ-ONLY mode. All write, update, and delete operations are blocked."
+        : "⚠️ Read-only mode disabled. Server is now in READ-WRITE mode. Write, update, and delete operations are now permitted. Be aware that destructive actions (e.g., deleting surveys, contacts, or distributions) are IRREVERSIBLE — deleted Qualtrics data cannot be recovered. You can re-enable read-only mode at any time.";
       return {
-        content: [{ type: "text", text: `Read-only mode ${args.enabled ? "enabled" : "disabled"}. Server is now in ${status} mode.` }],
+        content: [{ type: "text", text: message }],
       };
     }
   );
