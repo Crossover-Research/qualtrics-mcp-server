@@ -7,7 +7,7 @@ const ConfigSchema = z.object({
     baseUrl: z.string().optional(),
   }),
   server: z.object({
-    readOnly: z.boolean().default(false),
+    readOnly: z.boolean().default(true),
     rateLimiting: z.object({
       enabled: z.boolean().default(true),
       requestsPerMinute: z.number().default(50),
@@ -37,7 +37,7 @@ export async function loadConfig(): Promise<QualtricsConfig> {
       baseUrl: process.env.QUALTRICS_BASE_URL,
     },
     server: {
-      readOnly: process.env.QUALTRICS_READ_ONLY === "true",
+      readOnly: process.env.QUALTRICS_READ_ONLY !== "false",
       rateLimiting: {
         enabled: process.env.RATE_LIMITING_ENABLED !== "false",
         requestsPerMinute: parseInt(process.env.RATE_LIMIT_RPM || "50"),

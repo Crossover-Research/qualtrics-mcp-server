@@ -9,8 +9,8 @@ export async function createQualtricsServer() {
   const qualtricsClient = new QualtricsClient(config);
 
   const readOnlyInstructions = qualtricsClient.readOnly
-    ? "This server is running in READ-ONLY mode. All write, update, and delete operations are blocked. To enable writes, set QUALTRICS_READ_ONLY=false."
-    : "This server can read AND write to Qualtrics. Destructive tools (delete) require confirmDelete: true. If the user wants safe exploration, they can call set_read_only_mode to enable read-only mode, or set QUALTRICS_READ_ONLY=true in the environment.";
+    ? "This server is running in READ-ONLY mode (the safe default). All write, update, and delete operations are blocked. If the user asks to create, update, or delete something, let them know they are in read-only mode and offer to switch to read-write mode by calling set_read_only_mode. No environment variable changes are needed."
+    : "This server is in READ-WRITE mode. Destructive tools (delete) require confirmDelete: true. The user can call set_read_only_mode to re-enable read-only mode at any time for safe exploration.";
 
   const server = new McpServer({
     name: "qualtrics-mcp-server",
