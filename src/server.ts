@@ -1,16 +1,23 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadConfig } from "./config/settings.js";
-import { QualtricsClient } from "./services/qualtrics-client.js";
+import { QualtricsClient, ALL_WRITE_SCOPES, type WriteScope } from "./services/qualtrics-client.js";
 import { registerTools } from "./tools/index.js";
+
+const SCOPE_ENUM = z.enum(["users", "contacts", "surveys", "surveyDesign", "questionsAndBlocks", "distributions"]);
 
 export async function createQualtricsServer() {
   const config = await loadConfig();
   const qualtricsClient = new QualtricsClient(config);
 
+  const scopeInfo = QualtricsClient.getScopeInfo();
+  const scopeList = ALL_WRITE_SCOPES.map(s =>
+    `  - "${s}" [${scopeInfo[s].risk} risk]: ${scopeInfo[s].description} — ${scopeInfo[s].riskNote}`
+  ).join("\n");
+
   const readOnlyInstructions = qualtricsClient.readOnly
-    ? "This server is running in READ-ONLY mode (the safe default). All write, update, and delete operations are blocked. If the user asks to create, update, or delete something, let them know they are in read-only mode and offer to switch to read-write mode by calling set_read_only_mode. No environment variable changes are needed. IMPORTANT: Before disabling read-only mode, clearly warn the user that read-write mode allows operations that can permanently modify or delete surveys, contacts, and other Qualtrics data. Deleted Qualtrics data cannot be recovered. Ask the user to confirm they understand these risks before proceeding."
-    : "This server is in READ-WRITE mode. Destructive tools (delete) require confirmDelete: true. The user can call set_read_only_mode to re-enable read-only mode at any time for safe exploration.";
+    ? `This server is running in READ-ONLY mode (the safe default). All write, update, and delete operations are blocked. If the user asks to create, update, or delete something, let them know they are in read-only mode and offer to enable only the specific write scopes they need using set_write_scopes. Available scopes (ordered by risk):\n${scopeList}\nIMPORTANT: Before enabling write scopes, clearly warn the user about the risk level of the scopes being enabled. HIGH risk scopes (users, contacts, surveys) involve unrecoverable data loss. Prefer enabling only the minimum scopes needed — e.g., if a user just needs to add questions, only enable "questionsAndBlocks" (LOW risk). Ask the user to confirm they understand the risks before proceeding.`
+    : `This server is in READ-WRITE mode (all write scopes enabled). The user can call set_write_scopes to restrict or re-enable specific scopes at any time. Available scopes (ordered by risk):\n${scopeList}`;
 
   const server = new McpServer({
     name: "qualtrics-mcp-server",
@@ -25,26 +32,57 @@ export async function createQualtricsServer() {
   // Register all domain tools
   await registerTools(server, qualtricsClient, config);
 
-  // Register read-only mode toggle tool
+  // Register scoped write permissions tool
+  server.registerTool(
+    "set_write_scopes",
+    {
+      description: `Enable or disable write permissions for specific categories. Scopes by risk: HIGH (users, contacts, surveys — unrecoverable), MEDIUM (surveyDesign — reprogrammable), LOW (questionsAndBlocks — trash recoverable), MINIMAL (distributions). Use this to grant only the minimum permissions needed.`,
+      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: {
+        scopes: z.array(SCOPE_ENUM).describe("List of scopes to enable for writing. Pass an empty array to go fully read-only."),
+      },
+    },
+    async (args) => {
+      qualtricsClient.writeScopes = new Set(args.scopes as WriteScope[]);
+      const summary = qualtricsClient.getScopesSummary();
+      const status = qualtricsClient.readOnly ? "READ-ONLY" : "WRITE-ENABLED";
+      console.error(`Qualtrics MCP Server mode changed to ${status}`);
+
+      let message: string;
+      if (qualtricsClient.readOnly) {
+        message = `All write scopes disabled. Server is now in READ-ONLY mode.`;
+      } else {
+        const hasHighRisk = (args.scopes as string[]).some(s =>
+          ["users", "contacts", "surveys"].includes(s)
+        );
+        const warning = hasHighRisk
+          ? "\n\n⚠️ WARNING: You have enabled HIGH risk scopes. Operations in these scopes can permanently destroy Qualtrics data that CANNOT be recovered. Proceed with caution."
+          : "\n\nYou can adjust scopes at any time using set_write_scopes.";
+        message = `Write scopes updated.\n\n${summary}${warning}`;
+      }
+      return { content: [{ type: "text", text: message }] };
+    }
+  );
+
+  // Keep backwards-compatible set_read_only_mode as a convenience alias
   server.registerTool(
     "set_read_only_mode",
     {
-      description: "Enable or disable read-only mode for this session. When enabled, all write/update/delete API calls are blocked. Useful for safe exploration.",
+      description: "Quick toggle: enable read-only mode (blocks all writes) or disable it (enables all write scopes). For finer control, use set_write_scopes instead.",
       annotations: { destructiveHint: false, idempotentHint: true },
       inputSchema: {
-        enabled: z.boolean().describe("true to enable read-only mode, false to disable"),
+        enabled: z.boolean().describe("true to enable read-only mode, false to enable all write scopes"),
       },
     },
     async (args) => {
       qualtricsClient.readOnly = args.enabled;
+      const summary = qualtricsClient.getScopesSummary();
       const status = args.enabled ? "READ-ONLY" : "READ-WRITE";
       console.error(`Qualtrics MCP Server mode changed to ${status}`);
       const message = args.enabled
         ? "Read-only mode enabled. Server is now in READ-ONLY mode. All write, update, and delete operations are blocked."
-        : "⚠️ Read-only mode disabled. Server is now in READ-WRITE mode. Write, update, and delete operations are now permitted. Be aware that destructive actions (e.g., deleting surveys, contacts, or distributions) are IRREVERSIBLE — deleted Qualtrics data cannot be recovered. You can re-enable read-only mode at any time.";
-      return {
-        content: [{ type: "text", text: message }],
-      };
+        : `⚠️ Read-only mode disabled. All write scopes are now enabled.\n\n${summary}\n\n⚠️ WARNING: This includes HIGH risk scopes (users, contacts, surveys) where destructive actions are IRREVERSIBLE — deleted Qualtrics data cannot be recovered. Consider using set_write_scopes to enable only the scopes you need.`;
+      return { content: [{ type: "text", text: message }] };
     }
   );
 
